@@ -57,5 +57,5 @@ os.makedirs(os.path.join(ASSETS_DIR, 'music'), exist_ok=True)
 def get_drop_speed(level):
     """Return the drop speed in seconds for a given level"""
     # Formula: 1.0 - (level - 1) * 0.05, minimum 0.05
-    speed = 1.0 - (level - 1) * 0.05
+    speed = 1.0 - (level - 1) * 0.1
     return max(0.05, speed)
