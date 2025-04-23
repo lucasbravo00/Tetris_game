@@ -83,6 +83,15 @@ class Renderer:
                         1
                     )
 
+        # Draw a separation line between game board and UI area
+        pygame.draw.line(
+            self.screen,
+            COLORS['WHITE'],  # Line color
+            (board.width * config.BLOCK_SIZE, 0),  # Start point (top of screen at game board width)
+            (board.width * config.BLOCK_SIZE, config.SCREEN_HEIGHT),  # End point (bottom of screen)
+            2  # Line thickness
+        )
+
         # Draw the current piece
         self._draw_tetromino(board.current_piece)
 
@@ -90,9 +99,9 @@ class Renderer:
         self._draw_next_piece(board.next_piece)
 
         # Draw the score
-        self._draw_text(f"Score: {board.score}", 30, config.SCREEN_WIDTH - 100, 30, COLORS['WHITE'], centered=False)
-        self._draw_text(f"Speed: {board.level}", 30, config.SCREEN_WIDTH - 100, 60, COLORS['WHITE'], centered=False)
-        self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 100, 90, COLORS['WHITE'],
+        self._draw_text(f"Score: {board.score}", 30, config.SCREEN_WIDTH - 160, 30, COLORS['WHITE'], centered=False)
+        self._draw_text(f"Level: {board.level}", 30, config.SCREEN_WIDTH - 160, 60, COLORS['WHITE'], centered=False)
+        self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 160, 90, COLORS['WHITE'],
                         centered=False)
 
         pygame.display.update()
@@ -119,14 +128,14 @@ class Renderer:
     def _draw_next_piece(self, next_piece):
         """Draw the next piece preview"""
         # Draw preview box
-        preview_x = config.SCREEN_WIDTH - 150
-        preview_y = 150
+        preview_x = config.SCREEN_WIDTH - 160
+        preview_y = 200
 
         # Draw "Next" text
         self._draw_text("Next:", 30, preview_x, preview_y - 30, COLORS['WHITE'], centered=False)
 
         # Draw box outline
-        box_size = 100
+        box_size = 140
         pygame.draw.rect(self.screen, COLORS['WHITE'],
                          [preview_x, preview_y, box_size, box_size], 1)
 
