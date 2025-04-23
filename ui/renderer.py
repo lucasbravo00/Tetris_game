@@ -260,3 +260,26 @@ class Renderer:
                                     COLORS['WHITE'])
 
                     pygame.display.update()
+
+    def render_high_scores(self, high_scores):
+        """Render the high scores screen"""
+        self.screen.fill(config.BLACK)
+
+        # Draw title
+        self._draw_text("HIGH SCORES", 50, config.SCREEN_WIDTH // 2, 50, config.YELLOW)
+
+        # Display scores
+        start_y = 150
+        if high_scores:
+            for i, hs in enumerate(high_scores[:10]):
+                self._draw_text(f"{i + 1}. {hs['name']}: {hs['score']} pts",
+                                25, config.SCREEN_WIDTH // 2, start_y + i * 35, config.WHITE)
+        else:
+            self._draw_text("No high scores yet!", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
+                            config.WHITE)
+
+        # Back button
+        self._draw_text("Press ENTER to return", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT - 50,
+                        config.WHITE)
+
+        pygame.display.update()
