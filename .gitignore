@@ -1,0 +1,12 @@
+# Ignore everything
+**
+
+# But do not ignore this .gitignore file
+!.gitignore
+
+# Example: allow Python files anywhere in the project
+!**/*.py
+
+# Example: allow a specific folder and everything inside it
+!src/
+!src/**
