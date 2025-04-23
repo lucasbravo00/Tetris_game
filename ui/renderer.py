@@ -283,3 +283,18 @@ class Renderer:
                         config.WHITE)
 
         pygame.display.update()
+
+    def render_pause_menu(self, menu):
+        """Render the pause menu overlay"""
+        # Create a semi-transparent overlay
+        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))  # Transparent black
+        self.screen.blit(overlay, (0, 0))
+
+        # Draw pause text
+        self._draw_text("PAUSED", 60, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, config.WHITE)
+
+        # Draw menu
+        menu.draw(self.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+
+        pygame.display.update()
