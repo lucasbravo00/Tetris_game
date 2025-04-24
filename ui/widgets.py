@@ -64,7 +64,7 @@ class Menu:
     def __init__(self, options):
         self.options = options
         self.selected = 0
-        self.font = pygame.font.SysFont(FONTS['main'], 30)
+        self.font = pygame.font.SysFont(None, 30)
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -81,7 +81,7 @@ class Menu:
 
     def draw(self, screen, x, y):
         for i, option in enumerate(self.options):
-            color = COLORS['CYAN'] if i == self.selected else COLORS['WHITE']
+            color = (0, 255, 255) if i == self.selected else (255, 255, 255)
             text = self.font.render(option, True, color)
             rect = text.get_rect(center=(x, y + i * 40))
             screen.blit(text, rect)
