@@ -104,6 +104,8 @@ class Renderer:
         self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 160, 90, COLORS['WHITE'],
                         centered=False)
 
+        self._draw_text(f"Press 'P' to pause", 20, config.SCREEN_WIDTH - 160, 450, COLORS['WHITE'], centered=False)
+
         pygame.display.update()
 
     def _draw_tetromino(self, tetromino):
