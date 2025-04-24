@@ -116,13 +116,15 @@ class PlayingState(GameState):
         }
 
     def enter(self):
-        # Create a new board
-        self.board = Board()
-        self.fall_time = 0
-        self.last_time = pygame.time.get_ticks()
+        """Called when entering playing state"""
+        # Only create a new board if we don't have one yet
+        if self.board is None:
+            self.board = Board()
+            self.fall_time = 0
+            self.last_time = pygame.time.get_ticks()
 
-        # Start playing game music
-        self.state_manager.audio_manager.play_music('game')
+            # Start playing game music
+            self.state_manager.audio_manager.play_music('game')
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -222,35 +224,67 @@ class PausedState(GameState):
             "Restart",
             "Main Menu"
         ])
+        # Create a cached surface for the pause screen
+        self.cached_screen = None
 
     def enter(self):
         # Pause music
         self.state_manager.audio_manager.pause_music()
 
-    def exit(self):
-        # Resume music
-        self.state_manager.audio_manager.unpause_music()
+        # Create the cached screen
+        self._create_cached_screen()
 
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-            self.state_manager.change_state(GameStates.PLAYING)
-            return
-
-        selection = self.menu.handle_event(event)
-        if selection == "Resume":
-            self.state_manager.change_state(GameStates.PLAYING)
-        elif selection == "Restart":
-            self.state_manager.change_state(GameStates.PLAYING, reset=True)
-        elif selection == "Main Menu":
-            self.state_manager.change_state(GameStates.MAIN_MENU)
-
-    def render(self):
+    def _create_cached_screen(self):
+        """Create a cached version of the pause screen to prevent flickering"""
         # First render the game in the background
         playing_state = self.state_manager.states[GameStates.PLAYING]
         self.state_manager.renderer.render_game(playing_state.board)
 
-        # Then render the pause menu
-        self.state_manager.renderer.render_pause_menu(self.menu)
+        # Create a copy of the current screen
+        self.cached_screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        self.cached_screen.blit(self.state_manager.renderer.screen, (0, 0))
+
+        # Add a semi-transparent overlay
+        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))  # Transparent black
+        self.cached_screen.blit(overlay, (0, 0))
+
+        # Draw pause text and initial menu state
+        font = pygame.font.SysFont(None, 60)
+        pause_text = font.render("PAUSED", True, config.WHITE)
+        text_rect = pause_text.get_rect(center=(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4))
+        self.cached_screen.blit(pause_text, text_rect)
+
+    def exit(self):
+        # Resume music
+        self.state_manager.audio_manager.unpause_music()
+        self.cached_screen = None
+
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                self.state_manager.change_state(GameStates.PLAYING, False)
+                return
+
+        # Call menu.handle_event and capture the selection
+        selection = self.menu.handle_event(event)
+
+        if selection == "Resume":
+            self.state_manager.change_state(GameStates.PLAYING, False)
+        elif selection == "Restart":
+            self.state_manager.change_state(GameStates.PLAYING, True)
+        elif selection == "Main Menu":
+            self.state_manager.change_state(GameStates.MAIN_MENU)
+
+    def render(self):
+        # Use the cached background to avoid re-rendering the game
+        if self.cached_screen:
+            self.state_manager.renderer.screen.blit(self.cached_screen, (0, 0))
+
+        # Just draw the menu on top (which could change as user navigates)
+        self.menu.draw(self.state_manager.renderer.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+
+        pygame.display.update()
 
 
 class GameOverState(GameState):
@@ -352,11 +386,15 @@ class GameStateManager:
         self.current_state.enter()
 
     def change_state(self, new_state_type, reset=False):
+        """Change to a new game state"""
         # Exit current state
         self.current_state.exit()
 
+        print(f"Changing state to {new_state_type}, reset={reset}")  # Debug log
+
         # If state is PLAYING and needs to be reset, recreate it
-        if reset and new_state_type == GameStates.PLAYING:
+        if new_state_type == GameStates.PLAYING and reset:
+            print("Resetting playing state")  # Debug
             self.states[GameStates.PLAYING] = PlayingState(self)
 
         # Set new state
