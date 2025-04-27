@@ -1,413 +1,356 @@
 import pygame
-from enum import Enum, auto
-from core.board import Board
 import services.config as config
-from ui.widgets import InputBox, Menu
+from ui.theme import COLORS, FONTS
 
 
-class GameStates(Enum):
-    TITLE = auto()
-    NAME_ENTRY = auto()
-    MAIN_MENU = auto()
-    PLAYING = auto()
-    PAUSED = auto()
-    GAME_OVER = auto()
-    HIGH_SCORES = auto()
-    CONFIRM_NAME = auto()
+class Renderer:
+    def __init__(self, screen):
+        self.screen = screen
 
+    def _draw_text(self, text, size, x, y, color=COLORS['WHITE'], centered=True):
+        """Helper function to draw text on screen"""
+        font = pygame.font.SysFont(FONTS['main'], size)
+        text_surface = font.render(text, True, color)
+        text_rect = text_surface.get_rect()
 
-class GameState:
-    def __init__(self, state_manager):
-        self.state_manager = state_manager
-
-    def enter(self):
-        """Called when entering this state"""
-        pass
-
-    def exit(self):
-        """Called when exiting this state"""
-        pass
-
-    def handle_event(self, event):
-        """Handle pygame events"""
-        pass
-
-    def update(self):
-        """Update game logic"""
-        pass
-
-    def render(self):
-        """Render the state"""
-        pass
-
-
-class TitleState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-
-    def enter(self):
-        # Start playing title music
-        self.state_manager.audio_manager.play_music('title')
-
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RETURN:
-                self.state_manager.change_state(GameStates.NAME_ENTRY)
-
-    def render(self):
-        self.state_manager.renderer.render_title_screen()
-
-
-class NameEntryState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-        self.input_box = InputBox(
-            config.SCREEN_WIDTH // 2 - 100,
-            config.SCREEN_HEIGHT // 2,
-            200, 40
-        )
-
-    def handle_event(self, event):
-        result = self.input_box.handle_event(event)
-        if result == "ENTER" and self.input_box.text:
-            self.state_manager.player_name = self.input_box.text
-            self.state_manager.change_state(GameStates.MAIN_MENU)
-
-    def update(self):
-        self.input_box.update()
-
-    def render(self):
-        self.state_manager.renderer.render_name_entry(self.input_box)
-
-
-class MainMenuState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-        self.menu = Menu([
-            "Start Game",
-            "High Scores",
-            "Exit"
-        ])
-
-    def handle_event(self, event):
-        selection = self.menu.handle_event(event)
-        if selection == "Start Game":
-            self.state_manager.change_state(GameStates.PLAYING)
-        elif selection == "High Scores":
-            self.state_manager.change_state(GameStates.HIGH_SCORES)
-        elif selection == "Exit":
-            pygame.quit()
-            exit()
-
-    def render(self):
-        self.state_manager.renderer.render_main_menu(self.menu)
-
-
-class PlayingState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-        self.board = None
-        self.fall_time = 0
-        self.last_time = 0
-        self.key_repeat = {
-            pygame.K_LEFT: {"pressed": False, "time": 0},
-            pygame.K_RIGHT: {"pressed": False, "time": 0},
-            pygame.K_DOWN: {"pressed": False, "time": 0}
-        }
-
-    def enter(self):
-        """Called when entering playing state"""
-        # Only create a new board if we don't have one yet
-        if self.board is None:
-            self.board = Board()
-            self.fall_time = 0
-            self.last_time = pygame.time.get_ticks()
-
-            # Start playing game music
-            self.state_manager.audio_manager.play_music('game')
-
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_p:
-                self.state_manager.change_state(GameStates.PAUSED)
-            elif event.key == pygame.K_UP:
-                if self.board.rotate_piece():
-                    self.state_manager.audio_manager.play_sound('rotate')
-            elif event.key == pygame.K_SPACE:
-                if self.board.hard_drop():
-                    self.state_manager.audio_manager.play_sound('drop')
-                else:
-                    self.state_manager.audio_manager.play_sound('game_over')
-                    self.state_manager.change_state(GameStates.GAME_OVER)
-
-    def update(self):
-        current_time = pygame.time.get_ticks()
-        delta_time = (current_time - self.last_time) / 1000.0
-        self.last_time = current_time
-        self.fall_time += delta_time
-
-        # Handle key repeats for smoother movement
-        keys = pygame.key.get_pressed()
-        self._handle_key_repeats(keys, current_time)
-
-        # Check for game over
-        if self.board.game_over:
-            self.state_manager.final_score = self.board.score
-            self.state_manager.change_state(GameStates.GAME_OVER)
-            return
-
-        # Automatic falling
-        drop_speed = config.get_drop_speed(self.board.level)
-        if self.fall_time >= drop_speed:
-            if not self.board.move_piece(dy=1):
-                # Piece hit bottom, merge with board
-                if not self.board.merge_piece():
-                    self.state_manager.audio_manager.play_sound('game_over')
-                    self.state_manager.change_state(GameStates.GAME_OVER)
-            self.fall_time = 0
-
-    def _handle_key_repeats(self, keys, current_time):
-        # Handle left key
-        if keys[pygame.K_LEFT]:
-            if not self.key_repeat[pygame.K_LEFT]["pressed"]:
-                self.board.move_piece(dx=-1)
-                self.key_repeat[pygame.K_LEFT]["pressed"] = True
-                self.key_repeat[pygame.K_LEFT]["time"] = current_time
-            elif current_time - self.key_repeat[pygame.K_LEFT]["time"] > config.KEY_REPEAT_DELAY:
-                if (current_time - self.key_repeat[pygame.K_LEFT][
-                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
-                    self.board.move_piece(dx=-1)
+        if centered:
+            text_rect.center = (x, y)
         else:
-            self.key_repeat[pygame.K_LEFT]["pressed"] = False
+            text_rect.topleft = (x, y)
 
-        # Handle right key
-        if keys[pygame.K_RIGHT]:
-            if not self.key_repeat[pygame.K_RIGHT]["pressed"]:
-                self.board.move_piece(dx=1)
-                self.key_repeat[pygame.K_RIGHT]["pressed"] = True
-                self.key_repeat[pygame.K_RIGHT]["time"] = current_time
-            elif current_time - self.key_repeat[pygame.K_RIGHT]["time"] > config.KEY_REPEAT_DELAY:
-                if (current_time - self.key_repeat[pygame.K_RIGHT][
-                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
-                    self.board.move_piece(dx=1)
-        else:
-            self.key_repeat[pygame.K_RIGHT]["pressed"] = False
+        self.screen.blit(text_surface, text_rect)
 
-        # Handle down key (soft drop)
-        if keys[pygame.K_DOWN]:
-            if not self.key_repeat[pygame.K_DOWN]["pressed"]:
-                if not self.board.move_piece(dy=1):
-                    if not self.board.merge_piece():
-                        self.state_manager.audio_manager.play_sound('game_over')
-                        self.state_manager.change_state(GameStates.GAME_OVER)
-                self.key_repeat[pygame.K_DOWN]["pressed"] = True
-                self.key_repeat[pygame.K_DOWN]["time"] = current_time
-            elif current_time - self.key_repeat[pygame.K_DOWN]["time"] > config.KEY_REPEAT_DELAY:
-                if (current_time - self.key_repeat[pygame.K_DOWN][
-                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
-                    if not self.board.move_piece(dy=1):
-                        if not self.board.merge_piece():
-                            self.state_manager.audio_manager.play_sound('game_over')
-                            self.state_manager.change_state(GameStates.GAME_OVER)
-        else:
-            self.key_repeat[pygame.K_DOWN]["pressed"] = False
+        return text_rect
 
-    def render(self):
-        self.state_manager.renderer.render_game(self.board)
+    def render_title_screen(self):
+        """Render the title screen"""
+        self.screen.fill(COLORS['BLACK'])
 
+        # Draw title
+        self._draw_text("TETRIS", 80, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, COLORS['CYAN'])
 
-class PausedState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-        self.menu = Menu([
-            "Resume",
-            "Restart",
-            "Main Menu"
-        ])
-        # Create a cached surface for the pause screen
-        self.cached_screen = None
-
-    def enter(self):
-        # Pause music
-        self.state_manager.audio_manager.pause_music()
-
-        # Create the cached screen
-        self._create_cached_screen()
-
-    def _create_cached_screen(self):
-        """Create a cached version of the pause screen to prevent flickering"""
-        # First render the game in the background
-        playing_state = self.state_manager.states[GameStates.PLAYING]
-        self.state_manager.renderer.render_game(playing_state.board)
-
-        # Create a copy of the current screen
-        self.cached_screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
-        self.cached_screen.blit(self.state_manager.renderer.screen, (0, 0))
-
-        # Add a semi-transparent overlay
-        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 128))  # Transparent black
-        self.cached_screen.blit(overlay, (0, 0))
-
-        # Draw pause text and initial menu state
-        font = pygame.font.SysFont(None, 60)
-        pause_text = font.render("PAUSED", True, config.WHITE)
-        text_rect = pause_text.get_rect(center=(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4))
-        self.cached_screen.blit(pause_text, text_rect)
-
-    def exit(self):
-        # Resume music
-        self.state_manager.audio_manager.unpause_music()
-        self.cached_screen = None
-
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_p:
-                self.state_manager.change_state(GameStates.PLAYING, False)
-                return
-
-        # Call menu.handle_event and capture the selection
-        selection = self.menu.handle_event(event)
-
-        if selection == "Resume":
-            self.state_manager.change_state(GameStates.PLAYING, False)
-        elif selection == "Restart":
-            self.state_manager.change_state(GameStates.PLAYING, True)
-        elif selection == "Main Menu":
-            self.state_manager.change_state(GameStates.MAIN_MENU)
-
-    def render(self):
-        # Use the cached background to avoid re-rendering the game
-        if self.cached_screen:
-            self.state_manager.renderer.screen.blit(self.cached_screen, (0, 0))
-
-        # Just draw the menu on top (which could change as user navigates)
-        self.menu.draw(self.state_manager.renderer.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+        # Draw instructions
+        self._draw_text("Press ENTER to Start", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
+                        COLORS['WHITE'])
 
         pygame.display.update()
 
+    def render_name_entry(self, input_box):
+        """Render the name entry screen"""
+        self.screen.fill(COLORS['BLACK'])
 
-class GameOverState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
-        self.show_high_scores = False
+        # Draw title
+        self._draw_text("ENTER YOUR NAME", 40, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, COLORS['CYAN'])
 
-    def enter(self):
-        # Save the high score
-        self.state_manager.audio_manager.play_sound('game_over')
-        self.state_manager.audio_manager.stop_music()
-        self.high_scores = self.state_manager.high_score_manager.save_score(
-            self.state_manager.final_score,
-            self.state_manager.player_name
+        # Draw input box
+        input_box.draw(self.screen)
+
+        # Draw instructions
+        self._draw_text("Press ENTER when done", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT * 3 // 4,
+                        COLORS['WHITE'])
+
+        pygame.display.update()
+
+    def render_main_menu(self, menu):
+        """Render the main menu"""
+        self.screen.fill(COLORS['BLACK'])
+
+        # Draw title
+        self._draw_text("TETRIS", 80, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, COLORS['CYAN'])
+
+        # Draw menu
+        menu.draw(self.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+
+        pygame.display.update()
+
+    def render_game(self, board):
+        """Render the game board and current piece"""
+        self.screen.fill(config.BLACK)
+
+        # Draw the grid
+        for i in range(board.height):
+            for j in range(board.width):
+                if board.grid[i][j]:
+                    pygame.draw.rect(
+                        self.screen,
+                        board.colors[i][j],
+                        [j * config.BLOCK_SIZE, i * config.BLOCK_SIZE, config.BLOCK_SIZE, config.BLOCK_SIZE]
+                    )
+                    pygame.draw.rect(
+                        self.screen,
+                        config.WHITE,
+                        [j * config.BLOCK_SIZE, i * config.BLOCK_SIZE, config.BLOCK_SIZE, config.BLOCK_SIZE],
+                        1
+                    )
+
+        # Draw a separation line between game board and UI area
+        pygame.draw.line(
+            self.screen,
+            config.WHITE,
+            (board.width * config.BLOCK_SIZE, 0),
+            (board.width * config.BLOCK_SIZE, config.SCREEN_HEIGHT),
+            2
         )
 
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if not self.show_high_scores:
-                if event.key == pygame.K_RETURN:
-                    self.state_manager.change_state(GameStates.CONFIRM_NAME)
-                elif event.key == pygame.K_ESCAPE:
-                    self.state_manager.change_state(GameStates.MAIN_MENU)
-                elif event.key == pygame.K_h:
-                    self.show_high_scores = True
-            else:
-                if event.key == pygame.K_b:
-                    self.show_high_scores = False
-                elif event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
-                    if event.key == pygame.K_RETURN:
-                        self.state_manager.change_state(GameStates.CONFIRM_NAME)
+        # Draw the current piece
+        self._draw_tetromino(board.current_piece)
+
+        # Draw next piece preview
+        self._draw_next_piece(board.next_piece)
+
+        # Draw the score information
+        self._draw_text(f"Score: {board.score}", 30, config.SCREEN_WIDTH - 100, 30, config.WHITE, centered=False)
+        self._draw_text(f"Level: {board.level}", 30, config.SCREEN_WIDTH - 100, 60, config.WHITE, centered=False)
+        self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 100, 90, config.WHITE,
+                        centered=False)
+
+        pygame.display.update()
+
+    def render_game_over(self, score, player_name, high_scores, show_high_scores=False):
+        """Render the game over screen"""
+        self.screen.fill(config.BLACK)
+
+        if not show_high_scores:
+            # Draw game over message
+            self._draw_text("GAME OVER", 60, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, config.RED)
+
+            # Draw final score with player name
+            self._draw_text(f"{player_name}: {score} pts", 35, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 - 40,
+                            config.WHITE)
+
+            # Draw options
+            self._draw_text("Press H to view High Scores", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 20,
+                            config.CYAN)
+            self._draw_text("Press ENTER to Play Again", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 80,
+                            config.WHITE)
+            self._draw_text("Press ESC to Quit", 25, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 120,
+                            config.WHITE)
+        else:
+            # Draw high scores screen
+            self._draw_text("HIGH SCORES", 50, config.SCREEN_WIDTH // 2, 50, config.YELLOW)
+
+            # Check if this score is a new high score (in top 3)
+            is_new_high_score = False
+            for i, hs in enumerate(high_scores[:3]):
+                if hs['score'] == score and hs['name'] == player_name and i < 3:
+                    is_new_high_score = True
+
+            if is_new_high_score:
+                self._draw_text("NEW HIGH SCORE!", 35, config.SCREEN_WIDTH // 2, 100, config.GREEN)
+
+            # Display top scores (maximum 8 to fit on screen)
+            start_y = 150
+            for i, hs in enumerate(high_scores[:8]):
+                color = config.CYAN if hs['score'] == score and hs['name'] == player_name else config.WHITE
+                self._draw_text(f"{i + 1}. {hs['name']}: {hs['score']} pts",
+                                25, config.SCREEN_WIDTH // 2, start_y + i * 35, color)
+
+            # Back button
+            self._draw_text("Press B to go Back", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT - 50, config.WHITE)
+
+        pygame.display.update()
+
+    def render_confirm_name(self, player_name):
+        """Render the name confirmation screen"""
+        self.screen.fill(config.BLACK)
+
+        self._draw_text(f"Current Name: {player_name}", 40, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 3,
+                        config.WHITE)
+        self._draw_text("Keep this name?", 35, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2, config.CYAN)
+        self._draw_text("Y - Yes", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT * 2 // 3, config.WHITE)
+        self._draw_text("N - No", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT * 2 // 3 + 40, config.WHITE)
+
+        pygame.display.update()
+
+    def _draw_tetromino(self, tetromino):
+        """Draw a tetromino on the screen"""
+        for i, row in enumerate(tetromino.shape):
+            for j, cell in enumerate(row):
+                if cell:
+                    pygame.draw.rect(
+                        self.screen,
+                        tetromino.color,
+                        [(tetromino.x + j) * config.BLOCK_SIZE, (tetromino.y + i) * config.BLOCK_SIZE,
+                         config.BLOCK_SIZE, config.BLOCK_SIZE]
+                    )
+                    pygame.draw.rect(
+                        self.screen,
+                        COLORS['WHITE'],
+                        [(tetromino.x + j) * config.BLOCK_SIZE, (tetromino.y + i) * config.BLOCK_SIZE,
+                         config.BLOCK_SIZE, config.BLOCK_SIZE],
+                        1
+                    )
+
+    def _draw_next_piece(self, next_piece):
+        """Draw the next piece preview"""
+        # Draw preview box
+        preview_x = config.SCREEN_WIDTH - 160
+        preview_y = 200
+
+        # Draw "Next" text
+        self._draw_text("Next:", 30, preview_x, preview_y - 30, COLORS['WHITE'], centered=False)
+
+        # Draw box outline
+        box_size = 140
+        pygame.draw.rect(self.screen, COLORS['WHITE'],
+                         [preview_x, preview_y, box_size, box_size], 1)
+
+        # Calculate center position for the piece
+        offset_x = preview_x + box_size // 2 - (len(next_piece.shape[0]) * config.BLOCK_SIZE) // 2
+        offset_y = preview_y + box_size // 2 - (len(next_piece.shape) * config.BLOCK_SIZE) // 2
+
+        # Draw next piece
+        for i, row in enumerate(next_piece.shape):
+            for j, cell in enumerate(row):
+                if cell:
+                    pygame.draw.rect(
+                        self.screen,
+                        next_piece.color,
+                        [offset_x + j * config.BLOCK_SIZE, offset_y + i * config.BLOCK_SIZE,
+                         config.BLOCK_SIZE, config.BLOCK_SIZE]
+                    )
+                    pygame.draw.rect(
+                        self.screen,
+                        COLORS['WHITE'],
+                        [offset_x + j * config.BLOCK_SIZE, offset_y + i * config.BLOCK_SIZE,
+                         config.BLOCK_SIZE, config.BLOCK_SIZE],
+                        1
+                    )
+
+                def render_pause_menu(self, menu):
+                    """Render the pause menu overlay"""
+                    # Create a semi-transparent overlay
+                    overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+                    overlay.fill((0, 0, 0, 128))  # Transparent black
+                    self.screen.blit(overlay, (0, 0))
+
+                    # Draw pause text
+                    self._draw_text("PAUSED", 60, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, COLORS['WHITE'])
+
+                    # Draw menu
+                    menu.draw(self.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+
+                    pygame.display.update()
+
+                def render_game_over(self, score, player_name, high_scores, show_high_scores):
+                    """Render the game over screen"""
+                    self.screen.fill(COLORS['BLACK'])
+
+                    if not show_high_scores:
+                        # Draw game over message
+                        self._draw_text("GAME OVER", 60, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4,
+                                        COLORS['RED'])
+
+                        # Draw final score with player name
+                        self._draw_text(f"{player_name}: {score} pts", 35, config.SCREEN_WIDTH // 2,
+                                        config.SCREEN_HEIGHT // 2 - 40, COLORS['WHITE'])
+
+                        # Draw options
+                        self._draw_text("Press H to view High Scores", 30, config.SCREEN_WIDTH // 2,
+                                        config.SCREEN_HEIGHT // 2 + 20, COLORS['CYAN'])
+                        self._draw_text("Press ENTER to Play Again", 30, config.SCREEN_WIDTH // 2,
+                                        config.SCREEN_HEIGHT // 2 + 80, COLORS['WHITE'])
+                        self._draw_text("Press ESC to Quit", 25, config.SCREEN_WIDTH // 2,
+                                        config.SCREEN_HEIGHT // 2 + 120, COLORS['WHITE'])
                     else:
-                        self.state_manager.change_state(GameStates.MAIN_MENU)
+                        # Draw high scores screen
+                        self._draw_text("HIGH SCORES", 50, config.SCREEN_WIDTH // 2, 50, COLORS['YELLOW'])
 
-    def render(self):
-        self.state_manager.renderer.render_game_over(
-            self.state_manager.final_score,
-            self.state_manager.player_name,
-            self.high_scores,
-            self.show_high_scores
-        )
+                        # Check if this score is a new high score (in top 3)
+                        is_new_high_score = False
+                        for i, hs in enumerate(high_scores[:3]):
+                            if hs['score'] == score and hs['name'] == player_name and i < 3:
+                                is_new_high_score = True
 
+                        if is_new_high_score:
+                            self._draw_text("NEW HIGH SCORE!", 35, config.SCREEN_WIDTH // 2, 100, COLORS['GREEN'])
 
-class HighScoresState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
+                        # Display top scores (maximum 8 to fit on screen)
+                        start_y = 150
+                        for i, hs in enumerate(high_scores[:8]):
+                            color = COLORS['CYAN'] if hs['score'] == score and hs['name'] == player_name else COLORS[
+                                'WHITE']
+                            self._draw_text(f"{i + 1}. {hs['name']}: {hs['score']} pts",
+                                            25, config.SCREEN_WIDTH // 2, start_y + i * 35, color)
 
-    def enter(self):
-        self.high_scores = self.state_manager.high_score_manager.load_scores()
+                        # Back button
+                        self._draw_text("Press B to go Back", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT - 50,
+                                        COLORS['WHITE'])
 
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_b):
-                self.state_manager.change_state(GameStates.MAIN_MENU)
+                    pygame.display.update()
 
-    def render(self):
-        self.state_manager.renderer.render_high_scores(self.high_scores)
+                def render_high_scores(self, high_scores):
+                    """Render the high scores screen"""
+                    self.screen.fill(COLORS['BLACK'])
 
+                    # Draw title
+                    self._draw_text("HIGH SCORES", 50, config.SCREEN_WIDTH // 2, 50, COLORS['YELLOW'])
 
-class ConfirmNameState(GameState):
-    def __init__(self, state_manager):
-        super().__init__(state_manager)
+                    # Display scores
+                    start_y = 150
+                    if high_scores:
+                        for i, hs in enumerate(high_scores[:10]):
+                            self._draw_text(f"{i + 1}. {hs['name']}: {hs['score']} pts",
+                                            25, config.SCREEN_WIDTH // 2, start_y + i * 35, COLORS['WHITE'])
+                    else:
+                        self._draw_text("No high scores yet!", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
+                                        COLORS['WHITE'])
 
-    def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_y:
-                self.state_manager.change_state(GameStates.PLAYING, reset=True)
-            elif event.key == pygame.K_n:
-                self.state_manager.change_state(GameStates.NAME_ENTRY)
-            elif event.key == pygame.K_ESCAPE:
-                self.state_manager.change_state(GameStates.MAIN_MENU)
+                    # Back button
+                    self._draw_text("Press any key to return", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT - 50,
+                                    COLORS['WHITE'])
 
-    def render(self):
-        self.state_manager.renderer.render_confirm_name(self.state_manager.player_name)
+                    pygame.display.update()
 
+                def render_confirm_name(self, player_name):
+                    """Render the name confirmation screen"""
+                    self.screen.fill(COLORS['BLACK'])
 
-class GameStateManager:
-    def __init__(self, renderer, audio_manager, high_score_manager):
-        self.renderer = renderer
-        self.audio_manager = audio_manager
-        self.high_score_manager = high_score_manager
-        self.player_name = "Player"
-        self.final_score = 0
+                    self._draw_text(f"Current Name: {player_name}", 40, config.SCREEN_WIDTH // 2,
+                                    config.SCREEN_HEIGHT // 3, COLORS['WHITE'])
+                    self._draw_text("Keep this name?", 35, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
+                                    COLORS['CYAN'])
+                    self._draw_text("Y - Yes", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT * 2 // 3,
+                                    COLORS['WHITE'])
+                    self._draw_text("N - No", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT * 2 // 3 + 40,
+                                    COLORS['WHITE'])
 
-        # Initialize all states
-        self.states = {
-            GameStates.TITLE: TitleState(self),
-            GameStates.NAME_ENTRY: NameEntryState(self),
-            GameStates.MAIN_MENU: MainMenuState(self),
-            GameStates.PLAYING: PlayingState(self),
-            GameStates.PAUSED: PausedState(self),
-            GameStates.GAME_OVER: GameOverState(self),
-            GameStates.HIGH_SCORES: HighScoresState(self),
-            GameStates.CONFIRM_NAME: ConfirmNameState(self)
-        }
+                    pygame.display.update()
 
-        # Set initial state
-        self.current_state = self.states[GameStates.TITLE]
-        self.current_state.enter()
+    def render_high_scores(self, high_scores):
+        """Render the high scores screen"""
+        self.screen.fill(config.BLACK)
 
-    def change_state(self, new_state_type, reset=False):
-        """Change to a new game state"""
-        # Exit current state
-        self.current_state.exit()
+        # Draw title
+        self._draw_text("HIGH SCORES", 50, config.SCREEN_WIDTH // 2, 50, config.YELLOW)
 
-        print(f"Changing state to {new_state_type}, reset={reset}")  # Debug log
+        # Display scores
+        start_y = 150
+        if high_scores:
+            for i, hs in enumerate(high_scores[:10]):
+                self._draw_text(f"{i + 1}. {hs['name']}: {hs['score']} pts",
+                                25, config.SCREEN_WIDTH // 2, start_y + i * 35, config.WHITE)
+        else:
+            self._draw_text("No high scores yet!", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
+                            config.WHITE)
 
-        # If state is PLAYING and needs to be reset, recreate it
-        if new_state_type == GameStates.PLAYING and reset:
-            print("Resetting playing state")  # Debug
-            self.states[GameStates.PLAYING] = PlayingState(self)
+        # Back button
+        self._draw_text("Press ENTER to return", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT - 50,
+                        config.WHITE)
 
-        # Set new state
-        self.current_state = self.states[new_state_type]
+        pygame.display.update()
 
-        # Enter new state
-        self.current_state.enter()
+    def render_pause_menu(self, menu):
+        """Render the pause menu overlay"""
+        # Create a semi-transparent overlay
+        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))  # Transparent black
+        self.screen.blit(overlay, (0, 0))
 
-    def handle_event(self, event):
-        self.current_state.handle_event(event)
+        # Draw pause text
+        self._draw_text("PAUSED", 60, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, config.WHITE)
 
-    def update(self):
-        self.current_state.update()
+        # Draw menu
+        menu.draw(self.screen, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
 
-    def render(self):
-        self.current_state.render()
+        pygame.display.update()
