@@ -90,6 +90,9 @@ class MainMenuState(GameState):
             "Exit"
         ], state_manager)
 
+    def enter(self):
+        self.state_manager.audio_manager.play_music('title')
+
     def handle_event(self, event):
         selection = self.menu.handle_event(event)
         if selection == "Start Game":
@@ -425,6 +428,11 @@ class HighScoresState(GameState):
 
     def enter(self):
         self.high_scores = self.state_manager.high_score_manager.load_scores()
+
+        self.state_manager.audio_manager.play_music('high_score')
+
+    def exit(self):
+        self.state_manager.audio_manager.stop_music()
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
