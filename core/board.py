@@ -26,10 +26,18 @@ class Board:
 
         self.next_piece = Tetromino()
 
-        # Check if the new piece can be placed
-        if not self.is_valid_position():
-            self.game_over = True
-            return False
+        # Check if any part of the new piece overlaps with existing blocks
+        for i, row in enumerate(self.current_piece.shape):
+            for j, cell in enumerate(row):
+                if cell:
+                    x = self.current_piece.x + j
+                    y = self.current_piece.y + i
+
+                    # If the cell is within the grid and overlaps with an existing block
+                    if 0 <= y < self.height and 0 <= x < self.width and self.grid[y][x]:
+                        print(f"GAME OVER: New piece at ({x},{y}) overlaps with existing block")
+                        self.game_over = True
+                        return False
 
         return True
 
@@ -43,36 +51,49 @@ class Board:
                     x = piece.x + j + x_offset
                     y = piece.y + i + y_offset
 
-                    # Check if out of bounds or collides with another block
-                    if (x < 0 or x >= self.width or
-                            y >= self.height or
-                            (y >= 0 and self.grid[y][x])):
+                    # Check if out of bounds horizontally or at the bottom
+                    if x < 0 or x >= self.width or y >= self.height:
+                        return False
+
+                    # Check collision with existing pieces (even for cells above the grid)
+                    if y >= 0 and y < self.height and x >= 0 and x < self.width and self.grid[y][x]:
                         return False
 
         return True
 
     def merge_piece(self):
         """Merge the current piece with the board"""
+        if not self.current_piece:
+            return False
+
+        # Check if any part of the piece is above the grid
+        piece_partly_above_grid = any(self.current_piece.y + i < 0 for i in range(len(self.current_piece.shape)))
+
+        # Merge piece with the board
         for i, row in enumerate(self.current_piece.shape):
             for j, cell in enumerate(row):
-                if cell and self.current_piece.y + i >= 0:
-                    self.grid[self.current_piece.y + i][self.current_piece.x + j] = 1
-                    self.colors[self.current_piece.y + i][self.current_piece.x + j] = self.current_piece.color
+                if cell:
+                    # Only merge cells that are within the grid
+                    if 0 <= self.current_piece.y + i < self.height and 0 <= self.current_piece.x + j < self.width:
+                        self.grid[self.current_piece.y + i][self.current_piece.x + j] = 1
+                        self.colors[self.current_piece.y + i][self.current_piece.x + j] = self.current_piece.color
 
-        # Check for completed lines
-        lines = self.clear_lines()
+        # Clear lines and update scores
+        lines_cleared = self.clear_lines()
+        print(f"After merging piece: Score = {self.score}, Lines cleared = {self.lines_cleared}")
 
-        # Update score based on lines cleared
-        if lines > 0:
-            points = calculate_score(lines, self.level)
-            self.score += points
-            self.lines_cleared += lines
+        # If part of the piece was above the grid, it's likely game over
+        if piece_partly_above_grid:
+            print(f"GAME OVER: Piece merged while partly above grid, Final Score = {self.score}")
+            self.game_over = True
+            # DON'T return here, continue to return after the game over check
 
-            # Update level (every 10 lines)
-            self.level = (self.lines_cleared // 10) + 1
+        # Try to spawn a new piece
+        if not self.spawn_new_piece() and not self.game_over:
+            print(f"GAME OVER: Cannot spawn new piece, Final Score = {self.score}")
+            self.game_over = True
 
-        # Spawn a new piece
-        return self.spawn_new_piece()
+        return not self.game_over
 
     def clear_lines(self):
         """Clear completed lines and return the number of lines cleared"""
@@ -81,15 +102,37 @@ class Board:
         for i in range(self.height):
             if all(self.grid[i]):
                 lines_cleared += 1
-
                 # Move all lines above down
                 for j in range(i, 0, -1):
                     self.grid[j] = self.grid[j - 1][:]
                     self.colors[j] = self.colors[j - 1][:]
-
                 # Clear the top line
                 self.grid[0] = [0] * self.width
                 self.colors[0] = [config.BLACK] * self.width
+
+        if lines_cleared > 0:
+            print(f"Cleared {lines_cleared} lines")
+
+        # Update score based on lines cleared
+        if lines_cleared == 1:
+            self.score += 100
+            print(f"Added 100 points, score now: {self.score}")
+        elif lines_cleared == 2:
+            self.score += 300
+            print(f"Added 300 points, score now: {self.score}")
+        elif lines_cleared == 3:
+            self.score += 500
+            print(f"Added 500 points, score now: {self.score}")
+        elif lines_cleared == 4:
+            self.score += 800
+            print(f"Added 800 points, score now: {self.score}")
+
+        # Update lines cleared count
+        self.lines_cleared += lines_cleared
+
+        # Update level based on lines cleared
+        if lines_cleared > 0:
+            self.level = (self.lines_cleared // 10) + 1
 
         return lines_cleared
 
