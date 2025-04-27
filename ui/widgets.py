@@ -8,7 +8,7 @@ class InputBox:
         self.rect = pygame.Rect(x, y, width, height)
         self.color = COLORS['WHITE']
         self.text = text
-        self.font = pygame.font.SysFont(FONTS['main'], 32)
+        self.font = pygame.font.SysFont(FONTS['main'], 40)
         self.txt_surface = self.font.render(text, True, self.color)
         self.active = True
         self.cursor_visible = True
@@ -22,7 +22,7 @@ class InputBox:
                     return "ENTER"
                 elif event.key == pygame.K_BACKSPACE:
                     self.text = self.text[:-1]
-                elif len(self.text) < 15 and (event.unicode.isalnum() or event.unicode.isspace()):
+                elif len(self.text) < 12 and (event.unicode.isalnum() or event.unicode.isspace()):
                     self.text += event.unicode
 
                 # Reset cursor blink timer on any key press
