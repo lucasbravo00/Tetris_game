@@ -8,6 +8,7 @@ from ui.widgets import InputBox, Menu
 class GameStates(Enum):
     TITLE = auto()
     NAME_ENTRY = auto()
+    NAME_ENTRY_AFTER_GAME = auto()  # Add this new state
     MAIN_MENU = auto()
     PLAYING = auto()
     PAUSED = auto()
@@ -102,7 +103,6 @@ class MainMenuState(GameState):
     def render(self):
         self.state_manager.renderer.render_main_menu(self.menu)
 
-
 class PlayingState(GameState):
     def __init__(self, state_manager):
         super().__init__(state_manager)
@@ -116,15 +116,14 @@ class PlayingState(GameState):
         }
 
     def enter(self):
-        """Called when entering playing state"""
-        # Only create a new board if we don't have one yet
-        if self.board is None:
-            self.board = Board()
-            self.fall_time = 0
-            self.last_time = pygame.time.get_ticks()
+        # Always create a new board when entering the playing state
+        # This ensures a fresh start for each game
+        self.board = Board()
+        self.fall_time = 0
+        self.last_time = pygame.time.get_ticks()
 
-            # Start playing game music
-            self.state_manager.audio_manager.play_music('game')
+        # Start playing game music
+        self.state_manager.audio_manager.play_music('game')
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -141,29 +140,100 @@ class PlayingState(GameState):
                     self.state_manager.change_state(GameStates.GAME_OVER)
 
     def update(self):
+        """Update the playing state"""
+        # Skip if there's no board
+        if not self.board:
+            return
+
+        # ADDITIONAL CHECK: Explicitly check for game over condition
+        if self.board and self.board.current_piece:
+            if not self.board.is_valid_position():
+                print(f"GAME OVER: Current piece in invalid position during update, Score = {self.board.score}")
+                self.board.game_over = True
+                # IMPORTANT: Set the final score right here when game over is detected
+                self.state_manager.final_score = self.board.score
+                print(f"Setting final score to {self.state_manager.final_score}")
+
         current_time = pygame.time.get_ticks()
         delta_time = (current_time - self.last_time) / 1000.0
         self.last_time = current_time
         self.fall_time += delta_time
 
-        # Handle key repeats for smoother movement
-        keys = pygame.key.get_pressed()
-        self._handle_key_repeats(keys, current_time)
-
-        # Check for game over
+        # Check for game over immediately
         if self.board.game_over:
+            print(f"GAME OVER DETECTED: Score = {self.board.score}")
+            # Set the final score again to be sure it's captured
             self.state_manager.final_score = self.board.score
+            print(f"Setting final score to {self.state_manager.final_score}")
+            # Now change the state to GAME_OVER
             self.state_manager.change_state(GameStates.GAME_OVER)
             return
 
-        # Automatic falling
+        # Handle key repeats for smoother movement
+        keys = pygame.key.get_pressed()
+
+        # Handle left key
+        if keys[pygame.K_LEFT]:
+            if not self.key_repeat[pygame.K_LEFT]["pressed"]:
+                self.board.move_piece(dx=-1)
+                self.key_repeat[pygame.K_LEFT]["pressed"] = True
+                self.key_repeat[pygame.K_LEFT]["time"] = current_time
+            elif current_time - self.key_repeat[pygame.K_LEFT]["time"] > config.KEY_REPEAT_DELAY:
+                if (current_time - self.key_repeat[pygame.K_LEFT][
+                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
+                    self.board.move_piece(dx=-1)
+        else:
+            self.key_repeat[pygame.K_LEFT]["pressed"] = False
+
+        # Handle right key
+        if keys[pygame.K_RIGHT]:
+            if not self.key_repeat[pygame.K_RIGHT]["pressed"]:
+                self.board.move_piece(dx=1)
+                self.key_repeat[pygame.K_RIGHT]["pressed"] = True
+                self.key_repeat[pygame.K_RIGHT]["time"] = current_time
+            elif current_time - self.key_repeat[pygame.K_RIGHT]["time"] > config.KEY_REPEAT_DELAY:
+                if (current_time - self.key_repeat[pygame.K_RIGHT][
+                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
+                    self.board.move_piece(dx=1)
+        else:
+            self.key_repeat[pygame.K_RIGHT]["pressed"] = False
+
+        # Handle down key (soft drop)
+        if keys[pygame.K_DOWN]:
+            if not self.key_repeat[pygame.K_DOWN]["pressed"]:
+                if not self.board.move_piece(dy=1):
+                    # Piece hit bottom, merge with board
+                    result = self.board.merge_piece()
+                    if self.board.game_over:
+                        self.state_manager.final_score = self.board.score
+                        self.state_manager.change_state(GameStates.GAME_OVER)
+                self.key_repeat[pygame.K_DOWN]["pressed"] = True
+                self.key_repeat[pygame.K_DOWN]["time"] = current_time
+            elif current_time - self.key_repeat[pygame.K_DOWN]["time"] > config.KEY_REPEAT_DELAY:
+                if (current_time - self.key_repeat[pygame.K_DOWN][
+                    "time"] - config.KEY_REPEAT_DELAY) % config.KEY_REPEAT_INTERVAL < 20:
+                    if not self.board.move_piece(dy=1):
+                        # Piece hit bottom, merge with board
+                        result = self.board.merge_piece()
+                        if self.board.game_over:
+                            self.state_manager.final_score = self.board.score
+                            self.state_manager.change_state(GameStates.GAME_OVER)
+        else:
+            self.key_repeat[pygame.K_DOWN]["pressed"] = False
+
+        # Handle automatic falling
         drop_speed = config.get_drop_speed(self.board.level)
         if self.fall_time >= drop_speed:
             if not self.board.move_piece(dy=1):
-                # Piece hit bottom, merge with board
-                if not self.board.merge_piece():
-                    self.state_manager.audio_manager.play_sound('game_over')
+                # Piece hit bottom or another piece, merge with board
+                result = self.board.merge_piece()
+
+                if self.board.game_over:
+                    print(f"GAME OVER: Score = {self.board.score}, Lines = {self.board.lines_cleared}")
+                    self.state_manager.final_score = self.board.score
                     self.state_manager.change_state(GameStates.GAME_OVER)
+                    return
+
             self.fall_time = 0
 
     def _handle_key_repeats(self, keys, current_time):
@@ -291,33 +361,54 @@ class GameOverState(GameState):
     def __init__(self, state_manager):
         super().__init__(state_manager)
         self.show_high_scores = False
+        self.high_scores = []
 
     def enter(self):
-        # Save the high score
-        self.state_manager.audio_manager.play_sound('game_over')
-        self.state_manager.audio_manager.stop_music()
-        self.high_scores = self.state_manager.high_score_manager.save_score(
-            self.state_manager.final_score,
-            self.state_manager.player_name
-        )
+        print(f"Game Over State: Final Score = {self.state_manager.final_score}")
+
+        # Force the score to be the one from before the game over if it's set to 0
+        if self.state_manager.final_score == 0 and hasattr(self.state_manager,
+                                                           'states') and GameStates.PLAYING in self.state_manager.states:
+            playing_state = self.state_manager.states[GameStates.PLAYING]
+            if hasattr(playing_state, 'board') and playing_state.board:
+                self.state_manager.final_score = playing_state.board.score
+                print(f"Corrected Final Score = {self.state_manager.final_score}")
+
+        # Save the high score if it's greater than 0
+        if self.state_manager.final_score > 0:
+            self.state_manager.audio_manager.play_sound('game_over')
+            self.state_manager.audio_manager.stop_music()
+            self.high_scores = self.state_manager.high_score_manager.save_score(
+                self.state_manager.final_score,
+                self.state_manager.player_name
+            )
+            print(f"Saved high score: {self.state_manager.final_score}")
+        else:
+            # Just load the high scores without saving a new one
+            self.high_scores = self.state_manager.high_score_manager.load_scores()
+            print("Score was 0, did not save")
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if not self.show_high_scores:
                 if event.key == pygame.K_RETURN:
+                    # Go directly to name confirmation
                     self.state_manager.change_state(GameStates.CONFIRM_NAME)
                 elif event.key == pygame.K_ESCAPE:
-                    self.state_manager.change_state(GameStates.MAIN_MENU)
+                    # Directly exit the game when pressing ESC
+                    pygame.quit()
+                    exit()
                 elif event.key == pygame.K_h:
                     self.show_high_scores = True
             else:
                 if event.key == pygame.K_b:
                     self.show_high_scores = False
-                elif event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
-                    if event.key == pygame.K_RETURN:
-                        self.state_manager.change_state(GameStates.CONFIRM_NAME)
-                    else:
-                        self.state_manager.change_state(GameStates.MAIN_MENU)
+                elif event.key == pygame.K_ESCAPE:
+                    # Exit high scores view to game over screen
+                    self.show_high_scores = False
+                elif event.key == pygame.K_RETURN:
+                    # Go to name confirmation
+                    self.state_manager.change_state(GameStates.CONFIRM_NAME)
 
     def render(self):
         self.state_manager.renderer.render_game_over(
@@ -351,14 +442,42 @@ class ConfirmNameState(GameState):
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_y:
+                # Keep same name and start a new game
                 self.state_manager.change_state(GameStates.PLAYING, reset=True)
             elif event.key == pygame.K_n:
-                self.state_manager.change_state(GameStates.NAME_ENTRY)
+                # Change name and start a NAME_ENTRY state
+                # IMPORTANT: Don't save the high score again!
+                self.state_manager.change_state(GameStates.NAME_ENTRY_AFTER_GAME)
             elif event.key == pygame.K_ESCAPE:
+                # Go to main menu instead of back to game over
                 self.state_manager.change_state(GameStates.MAIN_MENU)
 
     def render(self):
         self.state_manager.renderer.render_confirm_name(self.state_manager.player_name)
+
+
+class NameEntryAfterGameState(GameState):
+    def __init__(self, state_manager):
+        super().__init__(state_manager)
+        self.input_box = InputBox(
+            config.SCREEN_WIDTH // 2 - 100,
+            config.SCREEN_HEIGHT // 2,
+            200, 40
+        )
+
+    def handle_event(self, event):
+        result = self.input_box.handle_event(event)
+        if result == "ENTER" and self.input_box.text:
+            # Set the new name but DON'T save a high score
+            self.state_manager.player_name = self.input_box.text
+            # Start a new game directly
+            self.state_manager.change_state(GameStates.PLAYING, reset=True)
+
+    def update(self):
+        self.input_box.update()
+
+    def render(self):
+        self.state_manager.renderer.render_name_entry(self.input_box)
 
 
 class GameStateManager:
@@ -373,6 +492,7 @@ class GameStateManager:
         self.states = {
             GameStates.TITLE: TitleState(self),
             GameStates.NAME_ENTRY: NameEntryState(self),
+            GameStates.NAME_ENTRY_AFTER_GAME: NameEntryAfterGameState(self),  # Add new state
             GameStates.MAIN_MENU: MainMenuState(self),
             GameStates.PLAYING: PlayingState(self),
             GameStates.PAUSED: PausedState(self),
@@ -390,12 +510,12 @@ class GameStateManager:
         # Exit current state
         self.current_state.exit()
 
-        print(f"Changing state to {new_state_type}, reset={reset}")  # Debug log
-
         # If state is PLAYING and needs to be reset, recreate it
-        if new_state_type == GameStates.PLAYING and reset:
-            print("Resetting playing state")  # Debug
-            self.states[GameStates.PLAYING] = PlayingState(self)
+        if new_state_type == GameStates.PLAYING:
+            if reset:
+                self.states[GameStates.PLAYING] = PlayingState(self)
+                # Reset the final score when starting a new game
+                self.final_score = 0
 
         # Set new state
         self.current_state = self.states[new_state_type]
