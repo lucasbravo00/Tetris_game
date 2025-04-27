@@ -110,9 +110,11 @@ class Renderer:
         self._draw_next_piece(board.next_piece)
 
         # Draw the score information
-        self._draw_text(f"Score: {board.score}", 30, config.SCREEN_WIDTH - 100, 30, config.WHITE, centered=False)
-        self._draw_text(f"Level: {board.level}", 30, config.SCREEN_WIDTH - 100, 60, config.WHITE, centered=False)
-        self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 100, 90, config.WHITE,
+        self._draw_text(f"Score: {board.score}", 30, config.SCREEN_WIDTH - 150, 30, config.WHITE, centered=False)
+        self._draw_text(f"Level: {board.level}", 30, config.SCREEN_WIDTH - 150, 60, config.WHITE, centered=False)
+        self._draw_text(f"Lines: {board.lines_cleared}", 30, config.SCREEN_WIDTH - 150, 90, config.WHITE,
+                        centered=False)
+        self._draw_text(f"Press 'P' to pause", 20, config.SCREEN_WIDTH - 150, 400, config.WHITE,
                         centered=False)
 
         pygame.display.update()
