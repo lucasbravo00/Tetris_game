@@ -27,7 +27,18 @@ class Renderer:
         self.screen.fill(COLORS['BLACK'])
 
         # Draw title
-        self._draw_text("TETRIS", 80, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 4, COLORS['CYAN'])
+        title = "TETRIS"
+        colors = [COLORS['RED'], COLORS['ORANGE'], COLORS['YELLOW'], COLORS['GREEN'], COLORS['BLUE'], COLORS['PURPLE']]
+
+        # Starting position (centered roughly)
+        start_x = config.SCREEN_WIDTH // 2 - 100
+        y = config.SCREEN_HEIGHT // 4
+        font_size = 80
+
+        # Draw each letter
+        for i, letter in enumerate(title):
+            color = colors[i % len(colors)]
+            self._draw_text(letter, font_size, start_x + i * 40, y, color)
 
         # Draw instructions
         self._draw_text("Press ENTER to Start", 30, config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2,
