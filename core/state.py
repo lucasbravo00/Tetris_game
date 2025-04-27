@@ -88,7 +88,7 @@ class MainMenuState(GameState):
             "Start Game",
             "High Scores",
             "Exit"
-        ])
+        ], state_manager)
 
     def handle_event(self, event):
         selection = self.menu.handle_event(event)
@@ -293,7 +293,7 @@ class PausedState(GameState):
             "Resume",
             "Restart",
             "Main Menu"
-        ])
+        ], state_manager)
         # Create a cached surface for the pause screen
         self.cached_screen = None
 
