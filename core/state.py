@@ -119,12 +119,16 @@ class PlayingState(GameState):
         }
 
     def enter(self):
-        # Always create a new board when entering the playing state
-        # This ensures a fresh start for each game
+        # Create a new board
         self.board = Board()
+    
+        # Pass the sounds to the board
+        if hasattr(self.state_manager, 'audio_manager'):
+            self.board.sounds = self.state_manager.audio_manager.sounds
+    
         self.fall_time = 0
         self.last_time = pygame.time.get_ticks()
-
+    
         # Start playing game music
         self.state_manager.audio_manager.play_music('game')
 
