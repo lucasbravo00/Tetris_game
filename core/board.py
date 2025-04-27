@@ -4,7 +4,7 @@ from core.rules import calculate_score
 
 
 class Board:
-    def __init__(self):
+    def __init__(self, sounds=None):
         self.width = config.GRID_WIDTH
         self.height = config.GRID_HEIGHT
         self.grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
@@ -15,6 +15,7 @@ class Board:
         self.lines_cleared = 0
         self.level = 1
         self.game_over = False
+        self.sounds = sounds or {}
         self.spawn_new_piece()
 
     def spawn_new_piece(self):
@@ -110,29 +111,40 @@ class Board:
                 self.grid[0] = [0] * self.width
                 self.colors[0] = [config.BLACK] * self.width
 
-        if lines_cleared > 0:
-            print(f"Cleared {lines_cleared} lines")
-
         # Update score based on lines cleared
-        if lines_cleared == 1:
-            self.score += 100
-            print(f"Added 100 points, score now: {self.score}")
-        elif lines_cleared == 2:
-            self.score += 300
-            print(f"Added 300 points, score now: {self.score}")
-        elif lines_cleared == 3:
-            self.score += 500
-            print(f"Added 500 points, score now: {self.score}")
-        elif lines_cleared == 4:
-            self.score += 800
-            print(f"Added 800 points, score now: {self.score}")
-
-        # Update lines cleared count
-        self.lines_cleared += lines_cleared
-
-        # Update level based on lines cleared
         if lines_cleared > 0:
-            self.level = (self.lines_cleared // 10) + 1
+            if lines_cleared == 1:
+                self.score += 100 * self.level
+                if 'line_clear' in self.sounds:
+                    self.sounds['line_clear'].play()
+            elif lines_cleared == 2:
+                self.score += 300 * self.level
+                if 'line_clear' in self.sounds:
+                    self.sounds['line_clear'].play()
+            elif lines_cleared == 3:
+                self.score += 500 * self.level
+                if 'line_clear' in self.sounds:
+                    self.sounds['line_clear'].play()
+            elif lines_cleared == 4:
+                self.score += 800 * self.level
+                if 'tetris' in self.sounds:
+                    self.sounds['tetris'].play()
+
+            # Update lines cleared count
+            self.lines_cleared += lines_cleared
+
+            # Calculate new level
+            new_level = (self.lines_cleared // 10) + 1
+
+            # Check if level has increased
+            if new_level > self.level:
+                # Level up!
+                old_level = self.level
+                self.level = new_level
+
+                # Play level up sound
+                if 'level_up' in self.sounds:
+                    self.sounds['level_up'].play()
 
         return lines_cleared
 
