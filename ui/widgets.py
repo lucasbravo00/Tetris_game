@@ -61,20 +61,24 @@ class InputBox:
 
 
 class Menu:
-    def __init__(self, options):
+    def __init__(self, options, state_manager):
         self.options = options
         self.selected = 0
         self.font = pygame.font.SysFont(None, 30)
+        self.state_manager = state_manager
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
                 self.selected = (self.selected - 1) % len(self.options)
+                self.state_manager.audio_manager.play_sound('menu_move')
                 return None
             elif event.key == pygame.K_DOWN:
                 self.selected = (self.selected + 1) % len(self.options)
+                self.state_manager.audio_manager.play_sound('menu_move')
                 return None
             elif event.key == pygame.K_RETURN:
+                self.state_manager.audio_manager.play_sound('menu_select')
                 return self.options[self.selected]
 
         return None
