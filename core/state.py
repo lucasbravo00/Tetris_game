@@ -121,14 +121,14 @@ class PlayingState(GameState):
     def enter(self):
         # Create a new board
         self.board = Board()
-    
+
         # Pass the sounds to the board
         if hasattr(self.state_manager, 'audio_manager'):
             self.board.sounds = self.state_manager.audio_manager.sounds
-    
+
         self.fall_time = 0
         self.last_time = pygame.time.get_ticks()
-    
+
         # Start playing game music
         self.state_manager.audio_manager.play_music('game')
 
@@ -155,11 +155,8 @@ class PlayingState(GameState):
         # ADDITIONAL CHECK: Explicitly check for game over condition
         if self.board and self.board.current_piece:
             if not self.board.is_valid_position():
-                print(f"GAME OVER: Current piece in invalid position during update, Score = {self.board.score}")
                 self.board.game_over = True
-                # IMPORTANT: Set the final score right here when game over is detected
                 self.state_manager.final_score = self.board.score
-                print(f"Setting final score to {self.state_manager.final_score}")
 
         current_time = pygame.time.get_ticks()
         delta_time = (current_time - self.last_time) / 1000.0
@@ -168,10 +165,8 @@ class PlayingState(GameState):
 
         # Check for game over immediately
         if self.board.game_over:
-            print(f"GAME OVER DETECTED: Score = {self.board.score}")
             # Set the final score again to be sure it's captured
             self.state_manager.final_score = self.board.score
-            print(f"Setting final score to {self.state_manager.final_score}")
             # Now change the state to GAME_OVER
             self.state_manager.change_state(GameStates.GAME_OVER)
             return
@@ -236,7 +231,6 @@ class PlayingState(GameState):
                 result = self.board.merge_piece()
 
                 if self.board.game_over:
-                    print(f"GAME OVER: Score = {self.board.score}, Lines = {self.board.lines_cleared}")
                     self.state_manager.final_score = self.board.score
                     self.state_manager.change_state(GameStates.GAME_OVER)
                     return
@@ -371,7 +365,6 @@ class GameOverState(GameState):
         self.high_scores = []
 
     def enter(self):
-        print(f"Game Over State: Final Score = {self.state_manager.final_score}")
 
         # Force the score to be the one from before the game over if it's set to 0
         if self.state_manager.final_score == 0 and hasattr(self.state_manager,
@@ -379,9 +372,8 @@ class GameOverState(GameState):
             playing_state = self.state_manager.states[GameStates.PLAYING]
             if hasattr(playing_state, 'board') and playing_state.board:
                 self.state_manager.final_score = playing_state.board.score
-                print(f"Corrected Final Score = {self.state_manager.final_score}")
 
-        # Save the high score if it's greater than 0
+        # Save the high score only if it's greater than 0
         if self.state_manager.final_score > 0:
             self.state_manager.audio_manager.play_sound('game_over')
             self.state_manager.audio_manager.stop_music()
@@ -389,11 +381,9 @@ class GameOverState(GameState):
                 self.state_manager.final_score,
                 self.state_manager.player_name
             )
-            print(f"Saved high score: {self.state_manager.final_score}")
         else:
             # Just load the high scores without saving a new one
             self.high_scores = self.state_manager.high_score_manager.load_scores()
-            print("Score was 0, did not save")
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -406,8 +396,10 @@ class GameOverState(GameState):
                     pygame.quit()
                     exit()
                 elif event.key == pygame.K_h:
-                    self.show_high_scores = True
+                    # Instead of setting a flag, directly change to high score state
+                    self.state_manager.change_state(GameStates.HIGH_SCORES)
             else:
+                # This shouldn't be reached anymore
                 if event.key == pygame.K_b:
                     self.show_high_scores = False
                 elif event.key == pygame.K_ESCAPE:
@@ -418,11 +410,12 @@ class GameOverState(GameState):
                     self.state_manager.change_state(GameStates.CONFIRM_NAME)
 
     def render(self):
+        # We'll only use this for the game over screen now, not high scores
         self.state_manager.renderer.render_game_over(
             self.state_manager.final_score,
             self.state_manager.player_name,
             self.high_scores,
-            self.show_high_scores
+            False  # Never show high scores here
         )
 
 
@@ -431,16 +424,20 @@ class HighScoresState(GameState):
         super().__init__(state_manager)
 
     def enter(self):
+        # Load high scores
         self.high_scores = self.state_manager.high_score_manager.load_scores()
 
+        # Play high score theme music
         self.state_manager.audio_manager.play_music('high_score')
 
     def exit(self):
+        # Stop the music when leaving
         self.state_manager.audio_manager.stop_music()
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_b):
+                # Return to the main menu
                 self.state_manager.change_state(GameStates.MAIN_MENU)
 
     def render(self):
@@ -519,8 +516,12 @@ class GameStateManager:
 
     def change_state(self, new_state_type, reset=False):
         """Change to a new game state"""
+        # Save the current state type before exiting
+        self.previous_state_type = type(self.current_state)
+
         # Exit current state
         self.current_state.exit()
+
 
         # If state is PLAYING and needs to be reset, recreate it
         if new_state_type == GameStates.PLAYING:
