@@ -36,7 +36,6 @@ class Board:
 
                     # If the cell is within the grid and overlaps with an existing block
                     if 0 <= y < self.height and 0 <= x < self.width and self.grid[y][x]:
-                        print(f"GAME OVER: New piece at ({x},{y}) overlaps with existing block")
                         self.game_over = True
                         return False
 
@@ -81,18 +80,15 @@ class Board:
 
         # Clear lines and update scores
         lines_cleared = self.clear_lines()
-        print(f"After merging piece: Score = {self.score}, Lines cleared = {self.lines_cleared}")
 
         # If part of the piece was above the grid, it's likely game over
         if piece_partly_above_grid:
-            print(f"GAME OVER: Piece merged while partly above grid, Final Score = {self.score}")
-            self.game_over = True
+           self.game_over = True
             # DON'T return here, continue to return after the game over check
 
         # Try to spawn a new piece
         if not self.spawn_new_piece() and not self.game_over:
-            print(f"GAME OVER: Cannot spawn new piece, Final Score = {self.score}")
-            self.game_over = True
+           self.game_over = True
 
         return not self.game_over
 
